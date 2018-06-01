@@ -1,2 +1,2 @@
 # progreport
-Stata program that matches survey dataset to master dataset to track survey progress
+Stata program that tracks survey progress
