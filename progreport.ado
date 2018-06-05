@@ -1,6 +1,6 @@
 
 program progreport
-	syntax, ///
+	syntax [using/], ///
 		Master(string) 			/// sample_dta
 		Survey(string) 			/// questionnaire data
 		ID(string) 				/// id variable from questionnaire data
@@ -10,7 +10,9 @@ program progreport
 		[MID(string)] 			/// id variable from master data
 		[VARiable]				/// default is to use variable labels
 		[NOLabel]				/// default is to use value labels
-		[FILEname(string)]		//  default is "Tracking Report"	
+		[FILEname(string)]		/// default is "Tracking Report"
+		[Target(real 1)]		/// target rate
+
 /* ------------------------------ Load Sample ------------------------------- */
 if "`filename'" == "" {
 	local filename "Progress Report"
@@ -58,7 +60,7 @@ qui {
 		sort pct_completed `comm'
 		export excel using "`filename'.xlsx", ///
 			firstrow(varl) sheet("Summary") cell(A2) replace
-
+		local d $S_DATE
 		qui count
 		local N = `r(N)' + 2
 		local all `comm' completed total pct_completed first_submitted last_submitted
@@ -118,7 +120,16 @@ qui {
 		local num = `r(N)'
 		noi dis "Created sheet for `community': interviewed `num' out of `den'"
 	}
+
+
+	if !mi("`using'") {
+		preserve
+			keep if qmerge==1
+			keep `id' `varlist'
+			save "`using'", replace
+	}
 }
+
 end
 
 mata: 
@@ -129,11 +140,12 @@ void create_summary_sheet(string scalar filename, string matrix allvars, string 
 	class xl scalar b
 	b = xl()
 	string scalar date
+	real scalar target
 
 	b.load_book(filename)
 	b.set_sheet("Summary")
 	b.set_mode("open")
-	date = st_global("S_DATE")
+	date = st_local("d")
 
 	b.set_top_border(1, (1,	6), "thick")
 	b.set_bottom_border((1,2), (1,6), "thick")
@@ -143,18 +155,20 @@ void create_summary_sheet(string scalar filename, string matrix allvars, string 
 
 	b.set_font_bold((1,2), (1,6), "on")
 	b.set_horizontal_align((1, N),(1,6), "center")
-	b.put_string(1, 1, "Tracking Summary" + " " + date)
+	b.put_string(1, 1, "Tracking Summary: " + date)
 	b.set_horizontal_align(1, (1,6), "merge")
 	b.set_number_format((3,N), 4, "percent")
 	
 	stat = st_sdata(., "pct_completed")
+	target = strtoreal(st_local("target"))-0.005
+
 	for (i=1; i<=length(stat); i++) {
 		
 		if (strtoreal(stat[i]) == 0) {
 			b.set_fill_pattern(i + 2, (4), "solid", "red")
 		}
 
-		else if (strtoreal(stat[i]) == 1) {
+		else if (strtoreal(stat[i]) >= target) {
 			b.set_fill_pattern(i + 2, (4), "solid", "green")
 		}
 		else {
