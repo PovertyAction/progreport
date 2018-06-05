@@ -10,7 +10,7 @@ program progreport
 		[MID(string)] 			/// id variable from master data
 		[VARiable]				/// default is to use variable labels
 		[NOLabel]				/// default is to use value labels
-		[FILEname(string)]		/// default is "Tracking Report"
+		[FILEname(string)]		/// default is "Progress Report"
 		[Target(real 1)]		/// target rate
 
 /* ------------------------------ Load Sample ------------------------------- */
