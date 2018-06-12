@@ -1,32 +1,41 @@
+*! version 1.0.0 Rosemarie Sandino 12jun2018
 
 program progreport
-	syntax [using/], ///
+	syntax, 	/// 
 		Master(string) 			/// sample_dta
 		Survey(string) 			/// questionnaire data
 		ID(string) 				/// id variable from questionnaire data
-		Comm(string) 			///	community variable
-		VARlist(string)			/// sample variables
-		[KEEPsurvey(string)]	/// keep from survey data
+		SORTby(string) 			///	sorting variable
+		KEEPmaster(string)		/// sample variables
+		[KEEPSurvey(string)]	/// keep from survey data
 		[MID(string)] 			/// id variable from master data
-		[VARiable]				/// default is to use variable labels
-		[NOLabel]				/// default is to use value labels
 		[FILEname(string)]		/// default is "Progress Report"
 		[Target(real 1)]		/// target rate
+		[DTA(string)] 			///	if you want an output file of those not interviewed yet
+		[VARiable]				/// default is to use variable labels
+		[NOLabel]				//  default is to use value labels
+
+	version 13
 
 /* ------------------------------ Load Sample ------------------------------- */
-if "`filename'" == "" {
-	local filename "Progress Report"
-}
-
 * load the sample list
 use "`master'", clear
+
 if !mi("`mid'") {
 	ren `mid' `id'
 }
 
+if "`filename'" == "" {
+	local filename "Progress Report"
+}
+
+if regexm("`filename'", ".xls") {
+	local filename = substr("`filename'", 1, strpos("`filename'", ".xl")-1) 
+}
+
 /* -------------------------- Merge Questionnaire --------------------------- */
 qui {
-	* merge completed questionnaire submissions 
+
 	merge 1:1 `id' using "`survey'", ///
 		keepusing(submissiondate `keepsurvey') ///
 		gen(qmerge)
@@ -38,18 +47,18 @@ qui {
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
 	decode qmerge, gen(status)
 
-	local allvars `id' `varlist' `keepsurvey' questionnaire_date status
+	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date status
 	lab var status "Status"
 	lab var questionnaire_date "Date Submitted"
 	order `allvars' 
-	gsort qmerge -questionnaire_date `id' `varlist'
+	gsort qmerge -questionnaire_date `id' `keepmaster'
 	
 	/* -------------------------- Create Summary Sheet -------------------------- */
 
 	preserve
 		gen completed = 1 if qmerge == 3
 		gen total = 1 if qmerge != 2
-		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`comm')
+		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`sortby')
 		gen pct_completed = completed/total, after(total)
 		lab var completed "Submitted"
 		lab var total "Total"
@@ -57,37 +66,22 @@ qui {
 		lab var first_submitted "First Submission"
 		lab var last_submitted "Last Submission"
 
-		sort pct_completed `comm'
+		sort pct_completed `sortby'
 		export excel using "`filename'.xlsx", ///
 			firstrow(varl) sheet("Summary") cell(A2) replace
 		local d $S_DATE
 		qui count
 		local N = `r(N)' + 2
-		local all `comm' completed total pct_completed first_submitted last_submitted
+		local all `sortby' completed total pct_completed first_submitted last_submitted
 		tostring `all', replace force
-		foreach var in `all' {
-			local len = strlen("`var'")
-			local name_widths `name_widths' `len'
-		}
 
-		mata : create_summary_sheet("`filename'", tokens("`all'"), tokens("`name_widths'"), `N')
+		mata : create_summary_sheet("`filename'", tokens("`all'"), `N')
 	restore
 
-	/* ------------------------ Create Community Sheets ------------------------- */
+	/* --------------------------- Create Sheets ---------------------------- */
 
 	if mi("`variable'") {
 		local variable = "varl"
-	}
-
-	foreach var in `allvars' {	
-		if "`variable'" == "varl" {
-			local lab : variable label `var'
-			local len = strlen("`lab'")
-		}
-		if "`variable'" == "variable" | "`len'" == "0" {
-			local len = strlen("`var'")
-		}
-		local varname_widths `varname_widths' `len' 
 	}
 
 	*If want value labels, encode variable so those are used as colwidth
@@ -100,34 +94,38 @@ qui {
 		}
 	}
 
-	local check `:type `comm''
+	local check `:type `sortby''
 	if substr("`check'", 1, 3) != "str" {
-		tostring `comm', replace
+		tostring `sortby', replace
 	}
 
-	levelsof `comm', local(comms)
+	levelsof `sortby', local(byvalues)
 
-	foreach community in `comms' {
-		export excel `allvars' if `comm' == "`community'" using "`filename'.xlsx", ///
-			firstrow(`variable') sheet("`community'") cell(A1) sheetreplace `nolabel'
+	foreach sortval in `byvalues' {
+		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
+			firstrow(`variable') sheet("`sortval'") cell(A1) sheetreplace `nolabel'
 			
-		qui count if `comm' == "`community'"
+		qui count if `sortby' == "`sortval'"
 		local N = `r(N)' + 1
 		
-		mata : create_tracking_sheet("`filename'.xlsx", "`community'", tokens("`allvars'"), tokens("`varname_widths'"), `N')
+		mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
 		local den = `N' - 1
-		qui count if `comm' == "`community'" & qmerge==3
+		qui count if `sortby' == "`sortval'" & qmerge == 3
 		local num = `r(N)'
-		noi dis "Created sheet for `community': interviewed `num' out of `den'"
+		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
 
 
-	if !mi("`using'") {
+	if !mi("`dta'") {	
 		preserve
-			keep if qmerge==1
-			keep `id' `varlist'
-			save "`using'", replace
+			keep if qmerge == 1
+			keep `id' `keepmaster'
+			save "`dta'", replace
+			noi dis "Saved remaining respondents to `dta'."
+		restore
+
 	}
+drop qmerge
 }
 
 end
@@ -135,12 +133,13 @@ end
 mata: 
 mata clear
 
-void create_summary_sheet(string scalar filename, string matrix allvars, string vector varname_widths, real scalar N) 
+void create_summary_sheet(string scalar filename, string matrix allvars, real scalar N) 
 {
 	class xl scalar b
 	b = xl()
 	string scalar date
 	real scalar target
+	real vector varname_widths
 
 	b.load_book(filename)
 	b.set_sheet("Summary")
@@ -176,10 +175,13 @@ void create_summary_sheet(string scalar filename, string matrix allvars, string 
 		}
 		
 	}
+	
 	column_widths = colmax(strlen(st_sdata(., allvars)))	
+	varname_widths = strlen(allvars)
+	
 	for (i=1; i<=cols(column_widths); i++) {
-		if	(column_widths[i] < strtoreal(varname_widths[i])) {
-			column_widths[i] = strtoreal(varname_widths[i])
+		if	(column_widths[i] < varname_widths[i]) {
+			column_widths[i] = varname_widths[i]
 		}
 
 		b.set_column_width(i, i, column_widths[i] + 2)
@@ -188,60 +190,58 @@ void create_summary_sheet(string scalar filename, string matrix allvars, string 
 }
 
 
-void create_tracking_sheet(string scalar filename, string scalar community, string matrix allvars, string vector varname_widths, real scalar N) 
+void create_progress_report(string scalar filename, string scalar sortval, string matrix allvars, real scalar N) 
 {
 	class xl scalar b
 	real scalar i
-	real vector right, rows, status
-	real vector column_widths
-	string matrix comm
-	string scalar test
+	real vector rows, status
+	real vector column_widths, varname_widths
+	string matrix sortvar
 	
 	b = xl()
 	
 	b.load_book(filename)
-	b.set_sheet(community)
+	b.set_sheet(sortval)
 	b.set_mode("open")
-	
-	r = length(varname_widths) - 2
-	s = length(varname_widths)
-	right = (r, s)
-	for (i=1; i<=length(right); i++) {
-		b.set_right_border((1,N), right[i], "thick")
-	}
-	
-	b.set_left_border((1,N), 1, "thick")
+
+	varname_widths = strlen(allvars)
 	column_widths = colmax(strlen(st_sdata(., allvars)))
 
 	for (i=1; i<=cols(column_widths); i++) {
-		if	(column_widths[i] < strtoreal(varname_widths[i])) {
-			column_widths[i] = strtoreal(varname_widths[i])
+		if (st_local("variable") == "varl") {
+			varlabel = st_varlabel(allvars[i])
+			if (varname_widths[i] < strlen(varlabel)) {
+				varname_widths[i] = strlen(varlabel)
+			}
+		}
+		if	(column_widths[i] < (varname_widths[i])) {
+			column_widths[i] = (varname_widths[i])
 		}
 
 		b.set_column_width(i, i, column_widths[i]+2)
-	}	
+	}
 	
-	b.set_top_border(1, (1,s), "thick")
-	b.set_bottom_border(1, (1,s), "thick")
-	b.set_bottom_border(N, (1,s), "thick")
-
-	b.set_font_bold((1), (1,s), "on")
-	b.set_horizontal_align((1,N), (1,s), "center")
+	b.set_right_border((1,N), length(varname_widths)-2, "thick")
+	b.set_right_border((1,N), length(varname_widths), "thick")
+	b.set_left_border((1,N), 1, "thick")
+	b.set_top_border(1, (1,length(varname_widths)), "thick")
+	b.set_bottom_border(1, (1,length(varname_widths)), "thick")
+	b.set_bottom_border(N, (1,length(varname_widths)), "thick")
+	b.set_font_bold((1), (1,length(varname_widths)), "on")
+	b.set_horizontal_align((1,N), (1,length(varname_widths)), "center")
 	
-	test = st_local("comm")
-	comm = st_sdata(., test)
-	rows = selectindex(comm :== community)
+	sortvar = st_sdata(., st_local("sortby"))
+	rows = selectindex(sortvar :== sortval)
 	status = st_data(rows, "qmerge")
 	for (i=1; i<=length(rows); i++) {
-		
 		if (status[i] == 1) {
-			b.set_fill_pattern(i + 1, (s), "solid", "red")
+			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "red")
 		}
 		else if (status[i] == 2) {
-			b.set_fill_pattern(i + 1, (s), "solid", "yellow")
+			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "yellow")
 		}
 		else if (status[i] == 3) {
-			b.set_fill_pattern(i + 1, (s), "solid", "green")
+			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "green")
 		}
 	}
 	b.close_book()
