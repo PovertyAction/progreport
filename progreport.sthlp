@@ -29,7 +29,7 @@ and optionally creats a dataset of those who have not been interviewed
 {p2coldent:* {opth m:aster(filename)}}master dataset{p_end}
 {p2coldent:* {opth s:urvey(filename)}}survey dataset{p_end}
 {p2coldent:* {opth id(varname)}}ID variable from survey{p_end}
-{p2coldent:* {opth sort:by(varname)}}variable to stratify progress report {p_end}
+{p2coldent:* {opth sort:by(varname)}}variable to stratify progress report from master dataset {p_end}
 {p2coldent:* {opth keep:master(varlist)}}variables to keep from master dataset; 
 ID variable and sortby variable already included{p_end}
 
@@ -41,10 +41,10 @@ survey dataset ID variable name {p_end}
 ID variable and sortby variable already included {p_end}
 {synopt:{opth dta(filename)}} creates a dta file of those who have 
 not been interviewed from master dataset {p_end}
-{synopt:{opt file:name(filename)}}specifies the name of the 
+{synopt:{opth file:name(filename)}}specifies the name of the 
 progress report file; default is {it:Progress Report.xlsx}{p_end}
-{synopt:{opt t:arget(integer)}}completion rate; default is 1 
-(100% or all master dataset respondents interviweed){p_end}
+{synopt:{opt t:arget(#)}}completion rate between 0 and 1; default is 1 
+(100% or all master dataset respondents interviewed){p_end}
 {synopt:{opt var:iable}}specifies that variable names should be used as column
 headers instead of variable labels{p_end}
 {synopt:{opt nolab:el}}export variable values instead of value labels{p_end}
