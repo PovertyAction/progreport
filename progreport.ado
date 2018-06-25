@@ -6,7 +6,7 @@ program progreport
 		Survey(string) 			/// questionnaire data
 		ID(string) 				/// id variable from questionnaire data
 		SORTby(string) 			///	sorting variable
-		KEEPmaster(string)		/// sample variables
+		KEEPMaster(string)		/// sample variables
 		[KEEPSurvey(string)]	/// keep from survey data
 		[MID(string)] 			/// id variable from master data
 		[FILEname(string)]		/// default is "Progress Report"
@@ -15,7 +15,7 @@ program progreport
 		[VARiable]				/// default is to use variable labels
 		[NOLabel]				//  default is to use value labels
 
-	version 13
+	version 15
 
 /* ------------------------------ Load Sample ------------------------------- */
 * load the sample list
@@ -103,7 +103,7 @@ qui {
 
 	foreach sortval in `byvalues' {
 		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
-			firstrow(`variable') sheet("`sortval'") cell(A1) sheetreplace `nolabel'
+			firstrow(`variable') sheet("`sortval'") sheetreplace `nolabel'
 			
 		qui count if `sortby' == "`sortval'"
 		local N = `r(N)' + 1
@@ -248,5 +248,3 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 }
 
 end
-
-
