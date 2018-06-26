@@ -16,7 +16,7 @@ and optionally creats a dataset of those who have not been interviewed
 {opth s:urvey(filename)} 
 {opth id(varname)} 
 {opth sort:by(varname)} 
-{opth keep:master(varlist)} 
+{opth keepm:aster(varlist)} 
 [{it:options}]
 
 {* Using -help readreplace- as a template.}{...}
@@ -30,16 +30,16 @@ and optionally creats a dataset of those who have not been interviewed
 {p2coldent:* {opth s:urvey(filename)}}survey dataset{p_end}
 {p2coldent:* {opth id(varname)}}ID variable from survey{p_end}
 {p2coldent:* {opth sort:by(varname)}}variable to stratify progress report from master dataset {p_end}
-{p2coldent:* {opth keep:master(varlist)}}variables to keep from master dataset; 
+{p2coldent:* {opth keepm:aster(varlist)}}variables to keep from master dataset; 
 ID variable and sortby variable already included{p_end}
 
 
 {syntab:Specifications}
 {synopt:{opth mid(varname)}}ID variable from master dataset if different from
 survey dataset ID variable name {p_end}
-{synopt:{opth keep:survey(varlist)}}variables to keep from survey dataset; 
+{synopt:{opth keeps:urvey(varlist)}}variables to keep from survey dataset; 
 ID variable and sortby variable already included {p_end}
-{synopt:{opth dta(filename)}} creates a dta file of those who have 
+{synopt:{opth dta(filename)}}creates a dta file of those who have 
 not been interviewed from master dataset {p_end}
 {synopt:{opth file:name(filename)}}specifies the name of the 
 progress report file; default is {it:Progress Report.xlsx}{p_end}
