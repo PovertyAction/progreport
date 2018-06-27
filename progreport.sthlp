@@ -82,15 +82,15 @@ reporting progress across all data collection and broken down by a sorting varia
 {pstd}
 Create progress report for survey_data.dta from master dataset master_data.dta
 {p_end}{cmd}{...}
-{phang2}. progreport, master("master_data.dta") s("survey_data.dta")
-id(respondent_id) keep(treatment contact1 contact2) keepsurvey(phone_1 phone_2) sortby(comm_live) {p_end}
+{phang2}. progreport, master("master_data.dta") survey("survey_data.dta")
+id(respondent_id) keepmaster(treatment contact1 contact2) keepsurvey(phone_1 phone_2) sortby(comm_live) {p_end}
 {txt}{...}
 
 {pstd}
 Create progress report and create dataset of those not yet interviewed named "need_to_interview.dta"
 {p_end}{cmd}{...}
-{phang2}. progreport, master("master_data.dta") s("survey_data.dta") dta("need_to_interview.dta")
-id(respondent_id) keep(treatment contact1 contact2) keepsurvey(phone_1 phone_2) sortby(comm_live){p_end}
+{phang2}. progreport, master("master_data.dta") survey("survey_data.dta") dta("need_to_interview.dta")
+id(respondent_id) keepmaster(treatment contact1 contact2) keepsurvey(phone_1 phone_2) sortby(comm_live){p_end}
 {txt}{...}
 
 
