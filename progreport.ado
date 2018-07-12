@@ -32,32 +32,32 @@ if "`filename'" == "" {
 if regexm("`filename'", ".xls") {
 	local filename = substr("`filename'", 1, strpos("`filename'", ".xl")-1) 
 }
-
+tempvar qmerge
 /* -------------------------- Merge Questionnaire --------------------------- */
 qui {
 
 	merge 1:1 `id' using "`survey'", ///
 		keepusing(submissiondate `keepsurvey') ///
-		gen(qmerge)
+		gen(`qmerge')
 
 	ren submissiondate questionnaire_date
 	replace questionnaire_date = dofc(questionnaire_date)
 	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
-	decode qmerge, gen(status)
+	decode `qmerge', gen(status)
 
 	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date status
 	lab var status "Status"
 	lab var questionnaire_date "Date Submitted"
 	order `allvars' 
-	gsort qmerge -questionnaire_date `id' `keepmaster'
+	gsort `qmerge' -questionnaire_date `id' `keepmaster'
 	
 	/* -------------------------- Create Summary Sheet -------------------------- */
 
 	preserve
-		gen completed = 1 if qmerge == 3
-		gen total = 1 if qmerge != 2
+		gen completed = 1 if `qmerge' == 3
+		gen total = 1 if `qmerge' != 2
 		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`sortby')
 		gen pct_completed = completed/total, after(total)
 		lab var completed "Submitted"
@@ -110,7 +110,7 @@ qui {
 		
 		mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
 		local den = `N' - 1
-		qui count if `sortby' == "`sortval'" & qmerge == 3
+		qui count if `sortby' == "`sortval'" & `qmerge' == 3
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
@@ -118,14 +118,13 @@ qui {
 
 	if !mi("`dta'") {	
 		preserve
-			keep if qmerge == 1
-			keep `id' `keepmaster'
+			keep if `qmerge' == 1
+			keep `sortby' `id' `keepmaster'
 			save "`dta'", replace
 			noi dis "Saved remaining respondents to `dta'."
 		restore
 
 	}
-drop qmerge
 }
 
 end
@@ -144,7 +143,6 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	b.load_book(filename)
 	b.set_sheet("Summary")
 	b.set_mode("open")
-	date = st_local("d")
 
 	b.set_top_border(1, (1,	6), "thick")
 	b.set_bottom_border((1,2), (1,6), "thick")
@@ -154,7 +152,7 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 
 	b.set_font_bold((1,2), (1,6), "on")
 	b.set_horizontal_align((1, N),(1,6), "center")
-	b.put_string(1, 1, "Tracking Summary: " + date)
+	b.put_string(1, 1, "Tracking Summary: " + st_local("d"))
 	b.set_horizontal_align(1, (1,6), "merge")
 	b.set_number_format((3,N), 4, "percent")
 	
@@ -232,7 +230,7 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	
 	sortvar = st_sdata(., st_local("sortby"))
 	rows = selectindex(sortvar :== sortval)
-	status = st_data(rows, "qmerge")
+	status = st_data(rows, st_local("qmerge"))
 	for (i=1; i<=length(rows); i++) {
 		if (status[i] == 1) {
 			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "red")
