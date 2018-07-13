@@ -1,6 +1,6 @@
-*! version 1.0.0 Rosemarie Sandino 12jun2018
-
-program progreport
+*! version 1.0.2 Rosemarie Sandino 12jul2018
+cap program drop progreport_track
+program progreport_track
 	syntax, 	/// 
 		Master(string) 			/// sample_dta
 		Survey(string) 			/// questionnaire data
@@ -9,6 +9,8 @@ program progreport
 		KEEPMaster(string)		/// sample variables
 		[KEEPSurvey(string)]	/// keep from survey data
 		[MID(string)] 			/// id variable from master data
+		[TRACKing(string)]		/// tracking sheet ***
+		[TVar(string)]			/// tracking variable(s) ***
 		[FILEname(string)]		/// default is "Progress Report"
 		[Target(real 1)]		/// target rate
 		[DTA(string)] 			///	if you want an output file of those not interviewed yet
@@ -17,7 +19,26 @@ program progreport
 
 	version 15
 
+qui {
+
 /* ------------------------------ Load Sample ------------------------------- */
+* prepare tracking data
+if !mi("`tracking'") {
+	use "`tracking'", clear
+
+	gsort -submissiondate
+	local val : value label `tvar'
+	collapse (firstnm) track_date = submissiondate `tvar' (count) attempts = `tvar', by(`id')  
+	keep track_date `id' attempts `tvar'
+	lab var track_date "Most Recent Track"
+	lab var attempts "Attempts"
+	lab val `tvar' `val'
+
+	tempfile track
+	save "`track'"
+}
+***************
+
 * load the sample list
 use "`master'", clear
 
@@ -32,9 +53,8 @@ if "`filename'" == "" {
 if regexm("`filename'", ".xls") {
 	local filename = substr("`filename'", 1, strpos("`filename'", ".xl")-1) 
 }
-tempvar qmerge
+tempvar qmerge tmerge status tstatus
 /* -------------------------- Merge Questionnaire --------------------------- */
-qui {
 
 	merge 1:1 `id' using "`survey'", ///
 		keepusing(submissiondate `keepsurvey') ///
@@ -45,10 +65,10 @@ qui {
 	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
-	decode `qmerge', gen(status)
+	decode `qmerge', gen(`status')
 
-	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date status
-	lab var status "Status"
+	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date `status'
+	lab var `status' "Status"
 	lab var questionnaire_date "Date Submitted"
 	order `allvars' 
 	gsort `qmerge' -questionnaire_date `id' `keepmaster'
@@ -80,6 +100,25 @@ qui {
 
 	/* --------------------------- Create Sheets ---------------------------- */
 
+	*************Merge in tracking info
+	if !mi("`tracking'") {
+		merge 1:1 `id' using "`track'", gen(`tmerge')
+		replace `tvar' = . if `qmerge'==3
+		replace attempts = . if `qmerge'==3
+		replace track_date = . if `qmerge'==3
+		
+		decode `tvar', gen(`tstatus')
+		replace `qmerge' = 1.5 if !mi(`tstatus')
+		replace `status' = `tstatus' if !mi(`tstatus')
+		
+		gsort `qmerge' track_date attempts -questionnaire_date `id' `keepmaster'
+		local allvars `allvars' track_date attempts 
+		replace track_date = dofc(track_date)
+		format track_date %td
+	}
+	**************
+
+	
 	if mi("`variable'") {
 		local variable = "varl"
 	}
@@ -100,10 +139,18 @@ qui {
 	}
 
 	levelsof `sortby', local(byvalues)
+	
+	preserve
+	if "`variable'" == "variable" {
+		ds `status' `qmerge', not
+		foreach var in `r(varlist)' {
+			lab var `var' "`var'"
+		}
+	}
 
 	foreach sortval in `byvalues' {
 		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
-			firstrow(`variable') sheet("`sortval'") sheetreplace `nolabel'
+			firstrow(varl) sheet("`sortval'") sheetreplace `nolabel'
 			
 		qui count if `sortby' == "`sortval'"
 		local N = `r(N)' + 1
@@ -114,12 +161,18 @@ qui {
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
-
+	restore
 
 	if !mi("`dta'") {	
 		preserve
-			keep if `qmerge' == 1
-			keep `sortby' `id' `keepmaster'
+			if !mi("`tracking'") {
+				keep if `qmerge' < 2
+				keep `sortby' `id' `keepmaster' track_date attempts `tvar'
+			}
+			else {
+				keep if `qmerge' == 1
+				keep `sortby' `id' `keepmaster' //add tracking variables
+			}
 			save "`dta'", replace
 			noi dis "Saved remaining respondents to `dta'."
 		restore
@@ -215,7 +268,6 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 		if	(column_widths[i] < (varname_widths[i])) {
 			column_widths[i] = (varname_widths[i])
 		}
-
 		b.set_column_width(i, i, column_widths[i]+2)
 	}
 	
@@ -228,18 +280,25 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	b.set_font_bold((1), (1,length(varname_widths)), "on")
 	b.set_horizontal_align((1,N), (1,length(varname_widths)), "center")
 	
+	
+	if (st_local("tracking") != "") {
+		count = length(varname_widths)-2
+		b.set_left_border((1,N), length(varname_widths)-2, "thick")
+	}
+	else count = length(varname_widths)
+	
 	sortvar = st_sdata(., st_local("sortby"))
 	rows = selectindex(sortvar :== sortval)
 	status = st_data(rows, st_local("qmerge"))
 	for (i=1; i<=length(rows); i++) {
 		if (status[i] == 1) {
-			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "red")
+			b.set_fill_pattern(i + 1, count, "solid", "red")
 		}
-		else if (status[i] == 2) {
-			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "yellow")
+		else if (status[i] == 1.5) {
+			b.set_fill_pattern(i + 1, count, "solid", "yellow")
 		}
 		else if (status[i] == 3) {
-			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "green")
+			b.set_fill_pattern(i + 1, count, "solid", "green")
 		}
 	}
 	b.close_book()
