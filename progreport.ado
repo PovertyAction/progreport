@@ -1,6 +1,6 @@
 *! version 1.0.2 Rosemarie Sandino 12jul2018
-cap program drop progreport_track
-program progreport_track
+
+program progreport
 	syntax, 	/// 
 		Master(string) 			/// sample_dta
 		Survey(string) 			/// questionnaire data
