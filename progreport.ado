@@ -20,9 +20,9 @@ program progreport
 
 /* ------------------------------ Load Sample ------------------------------- */
 qui {
-if "`clear'" != "clear" {
+if "`clear'" == "" {
 	tempfile orig
-	save "`orig'"
+	save "`orig'", emptyok
 }
 
 * load the sample list
@@ -133,15 +133,17 @@ tempvar status
 		preserve
 			keep if _merge == 1
 			keep `sortby' `id' `keepmaster'
+			order `sortby' `id' `keepmaster'
 			save "`dta'", replace
 			noi dis "Saved remaining respondents to `dta'."
 		restore
 
 	}
-
-		cap use "`orig'", clear
+	if "`clear'" == "" {
+		use "`orig'", clear
 	}
-
+	
+}
 end
 
 mata: 
