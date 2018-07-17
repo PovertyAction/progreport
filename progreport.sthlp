@@ -5,7 +5,7 @@
 {phang}
 {cmd:progreport} {hline 2}
 Compares master and survey datasets to create a progress report of completion rates
-and optionally creats a dataset of those who have not been interviewed
+and optionally creates a dataset of those who have not been interviewed
 
 {marker syntax}{...}
 {title:Syntax}
@@ -43,11 +43,12 @@ ID variable and sortby variable already included {p_end}
 not been interviewed from master dataset {p_end}
 {synopt:{opth file:name(filename)}}specifies the name of the 
 progress report file; default is {it:Progress Report.xlsx}{p_end}
-{synopt:{opt t:arget(#)}}completion rate between 0 and 1; default is 1 
+{synopt:{opt t:arget(#)}}target completion rate between 0 and 1; default is 1 
 (100% or all master dataset respondents interviewed){p_end}
 {synopt:{opt var:iable}}specifies that variable names should be used as column
 headers instead of variable labels{p_end}
 {synopt:{opt nolab:el}}export variable values instead of value labels{p_end}
+{synopt:{opt clear}}clears current memory and replaces with merged datasets{p_end}
 {synoptline}
 {p2colreset}{...}
 {* Using -help heckman- as a template.}{...}
