@@ -1,4 +1,4 @@
-*! version 1.0.1 Rosemarie Sandino 12jul2018
+*! version 1.0.1 Rosemarie Sandino 12jul2018 -- up to date 7/12/18
 
 program progreport
 	syntax, 	/// 
@@ -13,11 +13,17 @@ program progreport
 		[Target(real 1)]		/// target rate
 		[DTA(string)] 			///	if you want an output file of those not interviewed yet
 		[VARiable]				/// default is to use variable labels
-		[NOLabel]				//  default is to use value labels
+		[NOLabel]				/// default is to use value labels
+		[clear]					//	to show merged dataset; if not included, console remains the same
 
 	version 15
 
 /* ------------------------------ Load Sample ------------------------------- */
+if "`clear'" != "clear" {
+	tempfile orig
+	save "`orig'"
+}
+
 * load the sample list
 use "`master'", clear
 
@@ -27,37 +33,36 @@ if !mi("`mid'") {
 
 if "`filename'" == "" {
 	local filename "Progress Report"
-}
+}	
 
 if regexm("`filename'", ".xls") {
 	local filename = substr("`filename'", 1, strpos("`filename'", ".xl")-1) 
 }
-tempvar qmerge
+tempvar status
 /* -------------------------- Merge Questionnaire --------------------------- */
 qui {
 
 	merge 1:1 `id' using "`survey'", ///
-		keepusing(submissiondate `keepsurvey') ///
-		gen(`qmerge')
+		keepusing(submissiondate `keepsurvey')
 
 	ren submissiondate questionnaire_date
 	replace questionnaire_date = dofc(questionnaire_date)
 	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
-	decode `qmerge', gen(status)
+	decode _merge, gen(`status')
 
-	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date status
-	lab var status "Status"
+	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date `status'
+	lab var `status' "Status"
 	lab var questionnaire_date "Date Submitted"
 	order `allvars' 
-	gsort `qmerge' -questionnaire_date `id' `keepmaster'
+	gsort _merge -questionnaire_date `id' `keepmaster'
 	
 	/* -------------------------- Create Summary Sheet -------------------------- */
 
 	preserve
-		gen completed = 1 if `qmerge' == 3
-		gen total = 1 if `qmerge' != 2
+		gen completed = 1 if _merge == 3
+		gen total = 1 if _merge != 2
 		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`sortby')
 		gen pct_completed = completed/total, after(total)
 		lab var completed "Submitted"
@@ -110,7 +115,7 @@ qui {
 		
 		mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
 		local den = `N' - 1
-		qui count if `sortby' == "`sortval'" & `qmerge' == 3
+		qui count if `sortby' == "`sortval'" & _merge == 3
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
@@ -118,14 +123,16 @@ qui {
 
 	if !mi("`dta'") {	
 		preserve
-			keep if `qmerge' == 1
+			keep if _merge == 1
 			keep `sortby' `id' `keepmaster'
 			save "`dta'", replace
 			noi dis "Saved remaining respondents to `dta'."
 		restore
 
 	}
-}
+
+		cap use "`orig'", clear
+	}
 
 end
 
@@ -254,7 +261,7 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	
 	sortvar = st_sdata(., st_local("sortby"))
 	rows = selectindex(sortvar :== sortval)
-	status = st_data(rows, st_local("qmerge"))
+	status = st_data(rows, "_merge")
 	for (i=1; i<=length(rows); i++) {
 		if (status[i] == 1) {
 			b.set_fill_pattern(i + 1, (length(varname_widths)), "solid", "red")
