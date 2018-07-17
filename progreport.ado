@@ -1,4 +1,4 @@
-*! version 1.0.0 Rosemarie Sandino 12jun2018
+*! version 1.0.1 Rosemarie Sandino 12jul2018
 
 program progreport
 	syntax, 	/// 
@@ -71,7 +71,7 @@ qui {
 			firstrow(varl) sheet("Summary") cell(A2) replace
 		local d $S_DATE
 		qui count
-		local N = `r(N)' + 2
+		local N = `r(N)' + 3
 		local all `sortby' completed total pct_completed first_submitted last_submitted
 		tostring `all', replace force
 
@@ -137,24 +137,37 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	class xl scalar b
 	b = xl()
 	string scalar date
-	real scalar target
+	real scalar target, per
 	real vector varname_widths
 
 	b.load_book(filename)
 	b.set_sheet("Summary")
 	b.set_mode("open")
+	date = st_local("d")
+	
+	b.put_string(N, 1, "Total")
+	b.put_formula(N, 2, "SUM(B3:B" + strofreal(N-1) + ")")
+	b.put_formula(N, 3, "SUM(C3:C" + strofreal(N-1) + ")")
+	b.put_formula(N, 4, "B" + strofreal(N) + "/C" + strofreal(N))
+	b.set_number_format(N, 4, "percent")
+	b.put_formula(N, 5, "MIN(E3:E" + strofreal(N-1) + ")")	
+	b.put_formula(N, 6, "MAX(F3:F" + strofreal(N-1) + ")")
+	b.set_number_format(N, (5,6), "date")
 
 	b.set_top_border(1, (1,	6), "thick")
 	b.set_bottom_border((1,2), (1,6), "thick")
-	b.set_bottom_border(N, (1,6), "thick")
+	b.set_bottom_border(N-1, (1,6), "thick")
 	b.set_left_border((1, N), 1, "thick")
 	b.set_left_border((1, N), 7, "thick")
 
 	b.set_font_bold((1,2), (1,6), "on")
-	b.set_horizontal_align((1, N),(1,6), "center")
+	b.set_horizontal_align((1, N),(1,6), "center")	
 	b.put_string(1, 1, "Tracking Summary: " + st_local("d"))
 	b.set_horizontal_align(1, (1,6), "merge")
 	b.set_number_format((3,N), 4, "percent")
+	
+	b.set_font_bold(N, (1,6), "on")
+	b.set_bottom_border(N, (1,6), "thick")
 	
 	stat = st_sdata(., "pct_completed")
 	target = strtoreal(st_local("target"))-0.005
@@ -172,6 +185,17 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 			b.set_fill_pattern(i + 2, (4), "solid", "yellow")
 		}
 		
+	}
+	
+	per = b.get_number(N, 4)	
+	if (per == 0) {
+		b.set_fill_pattern(N, 4, "solid", "red")
+	}
+	else if (per >= target) {
+		b.set_fill_pattern(N, 4, "solid", "green")
+	}
+	else {
+		b.set_fill_pattern(N, 4, "solid", "yellow")
 	}
 	
 	column_widths = colmax(strlen(st_sdata(., allvars)))	
