@@ -116,7 +116,7 @@ tempvar status
 
 	foreach sortval in `byvalues' {
 		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
-			firstrow(`variable') sheet("`sortval'") sheetreplace `nolabel'
+			firstrow(varl) sheet("`sortval'") sheetreplace `nolabel'
 			
 		qui count if `sortby' == "`sortval'"
 		local N = `r(N)' + 1
