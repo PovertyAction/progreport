@@ -19,6 +19,7 @@ program progreport
 	version 15
 
 /* ------------------------------ Load Sample ------------------------------- */
+qui {
 if "`clear'" != "clear" {
 	tempfile orig
 	save "`orig'"
@@ -40,7 +41,6 @@ if regexm("`filename'", ".xls") {
 }
 tempvar status
 /* -------------------------- Merge Questionnaire --------------------------- */
-qui {
 
 	merge 1:1 `id' using "`survey'", ///
 		keepusing(submissiondate `keepsurvey')
@@ -106,6 +106,14 @@ qui {
 
 	levelsof `sortby', local(byvalues)
 
+	preserve
+	if "`variable'" == "variable" {
+		ds `status', not
+		foreach var in `r(varlist)' {
+			lab var `var' "`var'"
+		}
+	}
+
 	foreach sortval in `byvalues' {
 		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
 			firstrow(`variable') sheet("`sortval'") sheetreplace `nolabel'
@@ -119,7 +127,7 @@ qui {
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
-
+	restore
 
 	if !mi("`dta'") {	
 		preserve
