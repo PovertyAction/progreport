@@ -1,4 +1,4 @@
-*! version 1.0.1 Rosemarie Sandino 12jul2018 -- up to date 7/12/18
+*! version 1.0.1 Rosemarie Sandino 17jul2018
 
 program progreport
 	syntax, 	/// 
