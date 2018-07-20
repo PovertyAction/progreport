@@ -15,13 +15,20 @@ program progreport
 		[Target(real 1)]		/// target rate
 		[DTA(string)] 			///	if you want an output file of those not interviewed yet
 		[VARiable]				/// default is to use variable labels
-		[NOLabel]				//  default is to use value labels
+		[NOLabel]				/// default is to use value labels
+		[clear]					//	to show merged dataset; if not included, console remains the same
 
 	version 15
 
 qui {
 
 /* ------------------------------ Load Sample ------------------------------- */
+
+if "`clear'" == "" {
+	tempfile orig
+	save "`orig'", emptyok
+}
+
 * prepare tracking data
 if !mi("`tracking'") {
 	use "`tracking'", clear
@@ -37,7 +44,6 @@ if !mi("`tracking'") {
 	tempfile track
 	save "`track'"
 }
-***************
 
 * load the sample list
 use "`master'", clear
@@ -48,36 +54,38 @@ if !mi("`mid'") {
 
 if "`filename'" == "" {
 	local filename "Progress Report"
-}
+}	
 
 if regexm("`filename'", ".xls") {
 	local filename = substr("`filename'", 1, strpos("`filename'", ".xl")-1) 
 }
-tempvar qmerge tmerge status tstatus
+
+tempvar tmerge status tstatus
+
 /* -------------------------- Merge Questionnaire --------------------------- */
 
 	merge 1:1 `id' using "`survey'", ///
-		keepusing(submissiondate `keepsurvey') ///
-		gen(`qmerge')
+		keepusing(submissiondate `keepsurvey')
 
 	ren submissiondate questionnaire_date
 	replace questionnaire_date = dofc(questionnaire_date)
 	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
-	decode `qmerge', gen(`status')
+
+	decode _merge, gen(`status')
 
 	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date `status'
 	lab var `status' "Status"
 	lab var questionnaire_date "Date Submitted"
 	order `allvars' 
-	gsort `qmerge' -questionnaire_date `id' `keepmaster'
+	gsort _merge -questionnaire_date `id' `keepmaster'
 	
 	/* -------------------------- Create Summary Sheet -------------------------- */
 
 	preserve
-		gen completed = 1 if `qmerge' == 3
-		gen total = 1 if `qmerge' != 2
+		gen completed = 1 if _merge == 3
+		gen total = 1 if _merge != 2
 		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`sortby')
 		gen pct_completed = completed/total, after(total)
 		lab var completed "Submitted"
@@ -91,7 +99,7 @@ tempvar qmerge tmerge status tstatus
 			firstrow(varl) sheet("Summary") cell(A2) replace
 		local d $S_DATE
 		qui count
-		local N = `r(N)' + 2
+		local N = `r(N)' + 3
 		local all `sortby' completed total pct_completed first_submitted last_submitted
 		tostring `all', replace force
 
@@ -148,6 +156,14 @@ tempvar qmerge tmerge status tstatus
 		}
 	}
 
+	preserve
+	if "`variable'" == "variable" {
+		ds `status', not
+		foreach var in `r(varlist)' {
+			lab var `var' "`var'"
+		}
+	}
+
 	foreach sortval in `byvalues' {
 		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
 			firstrow(varl) sheet("`sortval'") sheetreplace `nolabel'
@@ -157,7 +173,7 @@ tempvar qmerge tmerge status tstatus
 		
 		mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
 		local den = `N' - 1
-		qui count if `sortby' == "`sortval'" & `qmerge' == 3
+		qui count if `sortby' == "`sortval'" & _merge == 3
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
@@ -165,21 +181,19 @@ tempvar qmerge tmerge status tstatus
 
 	if !mi("`dta'") {	
 		preserve
-			if !mi("`tracking'") {
-				keep if `qmerge' < 2
-				keep `sortby' `id' `keepmaster' track_date attempts `tvar'
-			}
-			else {
-				keep if `qmerge' == 1
-				keep `sortby' `id' `keepmaster' //add tracking variables
-			}
+			keep if _merge == 1
+			keep `sortby' `id' `keepmaster'
+			order `sortby' `id' `keepmaster'
 			save "`dta'", replace
 			noi dis "Saved remaining respondents to `dta'."
 		restore
 
 	}
+	if "`clear'" == "" {
+		use "`orig'", clear
+	}
+	
 }
-
 end
 
 mata: 
@@ -190,24 +204,37 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	class xl scalar b
 	b = xl()
 	string scalar date
-	real scalar target
+	real scalar target, per
 	real vector varname_widths
 
 	b.load_book(filename)
 	b.set_sheet("Summary")
 	b.set_mode("open")
+	date = st_local("d")
+	
+	b.put_string(N, 1, "Total")
+	b.put_formula(N, 2, "SUM(B3:B" + strofreal(N-1) + ")")
+	b.put_formula(N, 3, "SUM(C3:C" + strofreal(N-1) + ")")
+	b.put_formula(N, 4, "B" + strofreal(N) + "/C" + strofreal(N))
+	b.set_number_format(N, 4, "percent")
+	b.put_formula(N, 5, "MIN(E3:E" + strofreal(N-1) + ")")	
+	b.put_formula(N, 6, "MAX(F3:F" + strofreal(N-1) + ")")
+	b.set_number_format(N, (5,6), "date")
 
 	b.set_top_border(1, (1,	6), "thick")
 	b.set_bottom_border((1,2), (1,6), "thick")
-	b.set_bottom_border(N, (1,6), "thick")
+	b.set_bottom_border(N-1, (1,6), "thick")
 	b.set_left_border((1, N), 1, "thick")
 	b.set_left_border((1, N), 7, "thick")
 
 	b.set_font_bold((1,2), (1,6), "on")
-	b.set_horizontal_align((1, N),(1,6), "center")
+	b.set_horizontal_align((1, N),(1,6), "center")	
 	b.put_string(1, 1, "Tracking Summary: " + st_local("d"))
 	b.set_horizontal_align(1, (1,6), "merge")
 	b.set_number_format((3,N), 4, "percent")
+	
+	b.set_font_bold(N, (1,6), "on")
+	b.set_bottom_border(N, (1,6), "thick")
 	
 	stat = st_sdata(., "pct_completed")
 	target = strtoreal(st_local("target"))-0.005
@@ -225,6 +252,17 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 			b.set_fill_pattern(i + 2, (4), "solid", "yellow")
 		}
 		
+	}
+	
+	per = b.get_number(N, 4)	
+	if (per == 0) {
+		b.set_fill_pattern(N, 4, "solid", "red")
+	}
+	else if (per >= target) {
+		b.set_fill_pattern(N, 4, "solid", "green")
+	}
+	else {
+		b.set_fill_pattern(N, 4, "solid", "yellow")
 	}
 	
 	column_widths = colmax(strlen(st_sdata(., allvars)))	
@@ -289,7 +327,7 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	
 	sortvar = st_sdata(., st_local("sortby"))
 	rows = selectindex(sortvar :== sortval)
-	status = st_data(rows, st_local("qmerge"))
+	status = st_data(rows, "_merge")
 	for (i=1; i<=length(rows); i++) {
 		if (status[i] == 1) {
 			b.set_fill_pattern(i + 1, count, "solid", "red")
