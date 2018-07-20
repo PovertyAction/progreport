@@ -1,6 +1,6 @@
-*! version 1.0.2 Rosemarie Sandino 20jul2018 -- what's on 
-cap program drop progreport_t
-program progreport_t
+*! version 1.0.2 Rosemarie Sandino 20jul2018
+
+program progreport
 	syntax, 	/// 
 		Master(string) 			/// sample_dta
 		Survey(string) 			/// questionnaire data
