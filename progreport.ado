@@ -18,7 +18,7 @@ program progreport
 		[NOLabel]				/// default is to use value labels
 		[clear]					//	to show merged dataset; if not included, console remains the same
 
-	version 14.1
+	version 15
 
 qui {
 
@@ -73,7 +73,7 @@ tempvar  status tmerge tstatus
 
 	ren submissiondate questionnaire_date
 	replace questionnaire_date = dofc(questionnaire_date)
-	format questionnaire_date %td	
+	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
 	decode pr_merge, gen(`status')
@@ -103,11 +103,7 @@ tempvar  status tmerge tstatus
 		local d $S_DATE
 		local N = `=`=_N' + 3'
 		local all `sortby' completed total pct_completed first_submitted last_submitted
-		*tostring `all', replace force
-		summ completed
-		loc comp `r(sum)'
-		summ total
-		loc tot `r(sum)'
+		tostring `all', replace force
 
 		mata : create_summary_sheet("`filename'", tokens("`all'"), `N')
 	restore
@@ -234,23 +230,23 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 
 	b.set_font_bold((1,2), (1,6), "on")
 	b.set_horizontal_align((1, N),(1,6), "center")	
-	b.put_string(1, 1, "Summary by " + st_local("sortby") + ": " + st_local("d"))
+	b.put_string(1, 1, "Tracking Summary: " + st_local("d"))
 	b.set_horizontal_align(1, (1,6), "merge")
-		
 	b.set_number_format((3,N), 4, "percent")
+	
 	b.set_font_bold(N, (1,6), "on")
 	b.set_bottom_border(N, (1,6), "thick")
 	
-	stat = st_data(., "pct_completed")
+	stat = st_sdata(., "pct_completed")
 	target = strtoreal(st_local("target"))-0.005
 
 	for (i=1; i<=length(stat); i++) {
 		
-		if (stat[i] == 0) {
+		if (strtoreal(stat[i]) == 0) {
 			b.set_fill_pattern(i + 2, (4), "solid", "red")
 		}
 
-		else if (stat[i] >= target) {
+		else if (strtoreal(stat[i]) >= target) {
 			b.set_fill_pattern(i + 2, (4), "solid", "green")
 		}
 		else {
@@ -259,8 +255,7 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 		
 	}
 	
-	per = strtoreal(st_local("comp"))/strtoreal(st_local("tot"))
-	
+	per = b.get_number(N, 4)	
 	if (per == 0) {
 		b.set_fill_pattern(N, 4, "solid", "red")
 	}
