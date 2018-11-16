@@ -49,6 +49,10 @@ progress report file; default is {it:Progress Report.xlsx}{p_end}
 headers instead of variable labels{p_end}
 {synopt:{opt nolab:el}}export variable values instead of value labels{p_end}
 {synopt:{opt clear}}clears current memory and replaces with merged datasets{p_end}
+{synopt:{opt surveyok}}allows observations that only appear in survey data instead of only those that match across master and survey data.{p_end}
+{synopt:{opt work:books}}creates workbooks of completion rates for each value of 
+sortby variable instead of sheets. If there are over 20 values of the sortby variable, warning will suggest using this option.{p_end}
+
 {synoptline}
 {p2colreset}{...}
 {* Using -help heckman- as a template.}{...}
