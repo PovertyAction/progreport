@@ -1,5 +1,4 @@
-*! version 2.0.1 Rosemarie Sandino 10oct2018
-*! version 1.0.1 Rosemarie Sandino 17jul2018
+*! version 3.0.0 Innovations for Poverty Action 22oct2018
 
 program progreport
 	syntax, 	/// 
@@ -61,7 +60,7 @@ tempvar status
 
 		if "`surveyok'" == "" {
 			dis as err "`surveyonly' IDs appear in survey data only. Use -surveyok- option to allow or check for incorrect IDs."
-			error 198
+			exit 198
 
 		}
 		else {
@@ -164,14 +163,12 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 			lab var `var' "`var'"
 		}
 	}
-	export excel `id' `keepsurvey' questionnaire_date `status' if mi(`sortby') using "`filename'.xlsx", ///
+	export excel `id' `keepsurvey' questionnaire_date `status' if _merge == 2 using "`filename'.xlsx", ///
 	firstrow(varl) sheet("Only in Survey") sheetreplace `nolabel'
 	
 	restore
 	
-	qui count if mi(`sortby')
-	loc N = `r(N)' + 1
-	mata : create_progress_report("`filename'.xlsx", "Only in Survey", tokens("`id' `keepsurvey' questionnaire_date `status'"), `N')
+	mata : create_progress_report("`filename'.xlsx", "Only in Survey", tokens("`id' `keepsurvey' questionnaire_date `status'"), `=`surveyonly'+1')
 
 }
 	
@@ -352,6 +349,12 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 		}
 		b.set_column_width(i, i, column_widths[i] + 2)
 	}
+	
+	if (st_local("surveyok") == "surveyok" & strtoreal(st_local("surveyonly")) > 0) {
+		b.put_string(N+2, 1, st_local("surveyonly") + " IDs did not appear in master dataset. Review 'Only in Survey' sheet.")
+	}
+	
+	
 	b.close_book()
 }
 void create_progress_report(string scalar filename, string scalar sortval, string matrix allvars, real scalar N) 
