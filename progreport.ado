@@ -1,4 +1,4 @@
-*! version 1.0.2 Rosemarie Sandino 20jul2018
+*! version 3.0.0 Innovations for Poverty Action 22oct2018
 
 program progreport
 	syntax, 	/// 
@@ -16,9 +16,12 @@ program progreport
 		[DTA(string)] 			///	if you want an output file of those not interviewed yet
 		[VARiable]				/// default is to use variable labels
 		[NOLabel]				/// default is to use value labels
-		[clear]					//	to show merged dataset; if not included, console remains the same
-
-	version 15
+		[clear]					///	to show merged dataset; if not included, console remains the same
+		[summary]				/// if used, does not include individual observations
+		[WORKbooks]				/// separates into workbooks instead of worksheets in one workbook
+		[surveyok]				// allows people who are in survey data only
+		
+		version 14.1
 
 qui {
 
@@ -76,7 +79,24 @@ tempvar  status tmerge tstatus
 	format questionnaire_date %td
 
 	lab def _merge 1 "Not submitted" 2 "Only in Questionnaire Data" 3 "Submitted", modify
+
 	decode pr_merge, gen(`status')
+	qui count if pr_merge == 2
+	loc surveyonly `r(N)'
+	if `surveyonly' > 0 {
+
+		if "`surveyok'" == "" {
+			dis as err "`surveyonly' IDs appear in survey data only. Use -surveyok- option to allow or check for incorrect IDs."
+			exit 198
+
+		}
+		else {
+			noi di ""
+			noi di "`surveyonly' IDs appear in the survey data only. These IDs are not counted in the totals."
+
+		}
+	}
+
 
 	local allvars `id' `keepmaster' `keepsurvey' questionnaire_date `status'
 	lab var `status' "Status"
@@ -90,26 +110,42 @@ tempvar  status tmerge tstatus
 		gen completed = 1 if pr_merge == 3
 		gen total = 1 if pr_merge != 2
 		collapse (sum) completed total (min) first_submitted=questionnaire_date (max) last_submitted=questionnaire_date, by(`sortby')
+		drop if mi(`sortby') // so it doesn't show in the table
 		gen pct_completed = completed/total, after(total)
 		lab var completed "Submitted"
 		lab var total "Total"
 		lab var pct_completed "% Submitted"
-		lab var first_submitted "First Submission"
-		lab var last_submitted "Last Submission"
-
+		
+		g first_submission = string(first_submitted, "%td")
+		g last_submission = string(last_submitted, "%td")
+		lab var first_submission "First Submission"
+		lab var last_submission "Last Submission"
+		sum first_submitted
+		loc first_tot = string(`r(min)', "%td")
+		sum last_submitted 
+		loc last_tot = string(`r(max)', "%td")
+		
 		sort pct_completed `sortby'
-		export excel using "`filename'.xlsx", ///
-			firstrow(varl) sheet("Summary") cell(A2) replace
+		local all `sortby' completed total pct_completed first_submission last_submission
+
+		export excel `all' using "`filename'.xlsx", ///
+			firstrow(varl) sheet("Summary") cell(A2) sheetmodify
 		local d $S_DATE
-		local N = `=`=_N' + 3'
-		local all `sortby' completed total pct_completed first_submitted last_submitted
-		tostring `all', replace force
+		qui count
+		local N = `r(N)' + 3
+		*tostring `all', replace force
+		summ completed
+		loc comp `r(sum)'
+		summ total
+		loc tot `r(sum)'
 
 		mata : create_summary_sheet("`filename'", tokens("`all'"), `N')
+		noi di ""
+		noi di "{ul:Created summary sheet by `sortby': interviewed `comp' out of `tot' in total}"
+		noi di ""
 	restore
 
 	/* --------------------------- Create Sheets ---------------------------- */
-
 	*************Merge in tracking info
 	if !mi("`tracking'") {
 		merge 1:1 `id' using "`track'", gen(`tmerge')
@@ -127,6 +163,62 @@ tempvar  status tmerge tstatus
 		replace track_date = dofc(track_date)
 		format track_date %td
 	}
+if "`summary'"	== "" {
+
+if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
+
+	if mi("`variable'") {
+		local variable = "varl"
+	}
+
+	*If want value labels, encode variable so those are used as colwidth
+	if "`nolabel'" == "" {
+		ds `allvars', has(vallab)
+		foreach var in `r(varlist)' {
+			cap decode `var', gen(`var'_new)
+			if _rc == 111 {
+				lab val `var' .
+			}
+			if !_rc {
+				drop `var'
+				ren `var'_new `var'
+			}
+		}
+	}
+
+	local check `:type `sortby''
+	if substr("`check'", 1, 3) != "str" {
+		loc labels : val l `sortby'
+		if mi("`labels'") {
+			tostring `sortby', replace
+		}
+		else {
+
+			loc upper = strproper("`sortby'")
+			decode `sortby', gen(`upper')
+			loc sortby `upper'
+
+		}
+	}
+	
+	preserve
+	
+	if "`variable'" == "variable" {
+		ds `status', not
+		foreach var in `r(varlist)' {
+			lab var `var' "`var'"
+		}
+	}
+	export excel `id' `keepsurvey' questionnaire_date `status' if _merge == 2 using "`filename'.xlsx", ///
+	firstrow(varl) sheet("Only in Survey") sheetreplace `nolabel'
+	
+	restore
+	
+	mata : create_progress_report("`filename'.xlsx", "Only in Survey", tokens("`id' `keepsurvey' questionnaire_date `status'"), `=`surveyonly'+1')
+
+}
+	
+
 	
 	if mi("`variable'") {
 		local variable = "varl"
@@ -136,18 +228,40 @@ tempvar  status tmerge tstatus
 	if "`nolabel'" == "" {
 		ds `allvars', has(vallab)
 		foreach var in `r(varlist)' {
-			decode `var', gen(`var'_new)
-			drop `var'
-			ren `var'_new `var'
+			cap decode `var', gen(`var'_new)
+			if _rc == 111 {
+				lab val `var' .
+			}
+			if !_rc {
+				drop `var'
+				ren `var'_new `var'
+			}
 		}
 	}
 
 	local check `:type `sortby''
 	if substr("`check'", 1, 3) != "str" {
-		tostring `sortby', replace
+		loc labels : val l `sortby'
+		if mi("`labels'") {
+			tostring `sortby', replace
+		}
+		else {
+
+			loc upper = strproper("`sortby'")
+			decode `sortby', gen(`upper')
+			loc sortby `upper'
+
+		}
 	}
 
 	levelsof `sortby', local(byvalues)
+	qui tab `sortby'
+	loc sortcount `r(r)'
+	
+	if `sortcount' > 20 & "`workbooks'" == "" {
+	dis as error "`sortby' has more than 20 unique values. Please use the -workbooks- option to create workbooks instead of worksheets."
+	error 134
+	}
 
 	preserve
 	if "`variable'" == "variable" {
@@ -158,20 +272,34 @@ tempvar  status tmerge tstatus
 	}
 
 	foreach sortval in `byvalues' {
-		export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
+		if "`workbooks'" == "workbooks" {
+			export excel `allvars' if `sortby' == "`sortval'" using "`filename'_`sortval'.xlsx", ///
+			firstrow(varl) sheet("`sortval'") replace `nolabel'
+			}
+		else {
+			export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
 			firstrow(varl) sheet("`sortval'") sheetreplace `nolabel'
+
 			
 		count if `sortby' == "`sortval'"
-		local N = `r(N)' + 1
+
+    local N = `r(N)' + 1
 		
-		mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
+		if "`workbooks'" == "workbooks" {
+			mata : create_progress_report("`filename'_`sortval'.xlsx", "`sortval'", tokens("`allvars'"), `N')
+		}
+		
+		else {
+			mata : create_progress_report("`filename'.xlsx", "`sortval'", tokens("`allvars'"), `N')
+
+		}
 		local den = `N' - 1
 		count if `sortby' == "`sortval'" & pr_merge == 3
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
 	restore
-
+}
 	if !mi("`dta'") {	
 		preserve
 			keep if pr_merge <= 2
@@ -199,7 +327,6 @@ end
 
 mata: 
 mata clear
-
 void create_summary_sheet(string scalar filename, string matrix allvars, real scalar N) 
 {
 	class xl scalar b
@@ -207,7 +334,6 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	string scalar date
 	real scalar target, per
 	real vector varname_widths
-
 	b.load_book(filename)
 	b.set_sheet("Summary")
 	b.set_mode("open")
@@ -218,16 +344,14 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	b.put_formula(N, 3, "SUM(C3:C" + strofreal(N-1) + ")")
 	b.put_formula(N, 4, "B" + strofreal(N) + "/C" + strofreal(N))
 	b.set_number_format(N, 4, "percent")
-	b.put_formula(N, 5, "MIN(E3:E" + strofreal(N-1) + ")")	
-	b.put_formula(N, 6, "MAX(F3:F" + strofreal(N-1) + ")")
+	b.put_string(N, 5, st_local("first_tot"))
+	b.put_string(N, 6, st_local("last_tot"))
 	b.set_number_format(N, (5,6), "date")
-
 	b.set_top_border(1, (1,	6), "thick")
 	b.set_bottom_border((1,2), (1,6), "thick")
 	b.set_bottom_border(N-1, (1,6), "thick")
 	b.set_left_border((1, N), 1, "thick")
 	b.set_left_border((1, N), 7, "thick")
-
 	b.set_font_bold((1,2), (1,6), "on")
 	b.set_horizontal_align((1, N),(1,6), "center")	
 	b.put_string(1, 1, "Tracking Summary: " + st_local("d"))
@@ -239,15 +363,16 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	
 	stat = st_sdata(., "pct_completed")
 	target = strtoreal(st_local("target"))-0.005
-
 	for (i=1; i<=length(stat); i++) {
 		
 		if (strtoreal(stat[i]) == 0) {
 			b.set_fill_pattern(i + 2, 4, "solid", "red")
 		}
 
+
 		else if (strtoreal(stat[i]) >= target) {
 			b.set_fill_pattern(i + 2, 4, "solid", "green")
+
 		}
 		else {
 			b.set_fill_pattern(i + 2, 4, "solid", "yellow")
@@ -270,16 +395,24 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	varname_widths = strlen(allvars)
 	
 	for (i=1; i<=cols(column_widths); i++) {
-		if	(column_widths[i] < varname_widths[i]) {
-			column_widths[i] = varname_widths[i]
+					varlabel = st_varlabel(allvars[i])
+					if (varname_widths[i] < strlen(varlabel)) {
+						varname_widths[i] = strlen(varlabel)
+				}
+		
+		if	(column_widths[i] < (varname_widths[i])) {
+			column_widths[i] = (varname_widths[i])
 		}
-
 		b.set_column_width(i, i, column_widths[i] + 2)
 	}
+	
+	if (st_local("surveyok") == "surveyok" & strtoreal(st_local("surveyonly")) > 0) {
+		b.put_string(N+2, 1, st_local("surveyonly") + " IDs did not appear in master dataset. Review 'Only in Survey' sheet.")
+	}
+	
+	
 	b.close_book()
 }
-
-
 void create_progress_report(string scalar filename, string scalar sortval, string matrix allvars, real scalar N) 
 {
 	class xl scalar b
@@ -293,10 +426,8 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	b.load_book(filename)
 	b.set_sheet(sortval)
 	b.set_mode("open")
-
 	varname_widths = strlen(allvars)
 	column_widths = colmax(strlen(st_sdata(., allvars)))
-
 	for (i=1; i<=cols(column_widths); i++) {
 		if (st_local("variable") == "varl") {
 			varlabel = st_varlabel(allvars[i])
@@ -342,5 +473,4 @@ void create_progress_report(string scalar filename, string scalar sortval, strin
 	}
 	b.close_book()
 }
-
 end
