@@ -24,7 +24,6 @@ program progreport
 		version 14.1
 
 qui {
-
 /* ------------------------------ Load Sample ------------------------------- */
 
 if "`clear'" == "" {
@@ -35,7 +34,12 @@ if "`clear'" == "" {
 * prepare tracking data
 if !mi("`tracking'") {
 	use "`tracking'", clear
-
+	
+	cap confirm double variable submissiondate
+	if _rc {
+		dis "There is no submissiondate variable in `tracking'. This commands requires a double variable named -submissiondate-."
+		exit 198
+	}
 	gsort -submissiondate
 	local val : value label `tvar'
 	local misslab : variable label `tvar'
@@ -163,7 +167,7 @@ tempvar  status tmerge tstatus
 		replace track_date = dofc(track_date)
 		format track_date %td
 	}
-if "`summary'"	== "" {
+
 
 if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 
@@ -218,7 +222,7 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 
 }
 	
-
+if "`summary'"	== "" {
 	
 	if mi("`variable'") {
 		local variable = "varl"
@@ -249,11 +253,12 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 
 			loc upper = strproper("`sortby'")
 			decode `sortby', gen(`upper')
+			loc old `sortby'
 			loc sortby `upper'
 
 		}
 	}
-
+	
 	levelsof `sortby', local(byvalues)
 	qui tab `sortby'
 	loc sortcount `r(r)'
@@ -279,7 +284,7 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 		else {
 			export excel `allvars' if `sortby' == "`sortval'" using "`filename'.xlsx", ///
 			firstrow(varl) sheet("`sortval'") sheetreplace `nolabel'
-
+		}
 			
 		count if `sortby' == "`sortval'"
 
@@ -298,8 +303,10 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 		local num = `r(N)'
 		noi dis "Created sheet for `sortval': interviewed `num' out of `den'"
 	}
+	
 	restore
 }
+
 	if !mi("`dta'") {	
 		preserve
 			keep if pr_merge <= 2
@@ -316,13 +323,14 @@ if "`surveyok'" == "surveyok" & `surveyonly' > 0 {
 		restore
 
 	}
-	if "`clear'" == "" {
-		use "`orig'", clear
-	}
-	
+
+	if !mi("`old'") loc sortby `old'
 	if !mi("`tracking'") order `sortby' `id' pr_merge track_date `tvar' pr_attempts
-	else order `sortby' `id' pr_merge	
-}
+	else order `sortby' `id' pr_merge
+	
+	if "`clear'" == "" use "`orig'", clear
+	
+} //qui bracket
 end
 
 mata: 
@@ -361,16 +369,16 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 	b.set_font_bold(N, (1,6), "on")
 	b.set_bottom_border(N, (1,6), "thick")
 	
-	stat = st_sdata(., "pct_completed")
+	stat = st_data(., "pct_completed")
 	target = strtoreal(st_local("target"))-0.005
 	for (i=1; i<=length(stat); i++) {
 		
-		if (strtoreal(stat[i]) == 0) {
+		if (stat[i] == 0) {
 			b.set_fill_pattern(i + 2, 4, "solid", "red")
 		}
 
 
-		else if (strtoreal(stat[i]) >= target) {
+		else if (stat[i] >= target) {
 			b.set_fill_pattern(i + 2, 4, "solid", "green")
 
 		}
@@ -380,7 +388,8 @@ void create_summary_sheet(string scalar filename, string matrix allvars, real sc
 		
 	}
 	
-	per = b.get_number(N, 4)	
+	per = strtoreal(st_local("comp"))/strtoreal(st_local("tot"))
+
 	if (per == 0) {
 		b.set_fill_pattern(N, 4, "solid", "red")
 	}
